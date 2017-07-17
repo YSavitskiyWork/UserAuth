@@ -158,19 +158,24 @@ app.post('/api/todo/list/archive', jsonParser, function(req, res)
 
 app.post('/api/todo/done', jsonParser, function(req, res)
     {
-        ToDos.sequelize.query("UPDATE todolists " +
-        "SET is_done = " + "'t'" +
-        " WHERE id = ANY ('{" + req.body.id + "}'::int[]);")
-        .spread(()=>{return 'success';});
+        req.body.id.forEach(element => {
+            ToDos.findOne({where: {id: req.body.id}})
+            .then(dbUser => {
+                dbUser.update({is_done: "t"});
+            })
+        })
+        res.send("Success\n");
     });
 
 app.post('/api/todo/archive', jsonParser, function(req, res)
 {
-    ToDos.sequelize.query("UPDATE todolists " +
-    "SET in_archive = " + "'t'" +
-    " WHERE id = ANY ('{" + req.body.id + "}'::int[]);")
-    .spread(() => {return 'success';});
-
+    req.body.id.forEach(element => {
+        ToDos.findOne({where: {id: req.body.id}})
+        .then(dbUser => {
+            dbUser.update({in_archive: "t"});
+        })
+    })
+    res.send("Success");
 
 });
 
