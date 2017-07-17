@@ -25,6 +25,17 @@ function hashing(data)
     return hashStr;
 }
 
+function verifyToken(token)
+{
+    try {
+        jwt.verify(token, key)
+    } catch(err)
+    {
+        return false;
+    }
+    return true;
+}
+
 const sequelize = new Sequelize('user_auth_test', "postgres", "1",
     {
         dialect: 'postgres'
@@ -55,7 +66,11 @@ const Users = sequelize.define('users',
                 validate: {
                     notEmpty: true
                 }
-            }
+            },
+        is_active: {
+            type: Sequelize.BOOLEAN,
+            defaultValue: false
+        }
     },
     {
         timestamps: false
@@ -101,7 +116,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 //app.use("/apic", jwt({/**/}));
 
 ////////////////////Authorithation//////////////////////////////////
-app.post('/api/singin', jsonParser, function(req, res)
+app.post('/api/signin', jsonParser, function(req, res)
     {
         Users.findOne({
             where: {
@@ -116,22 +131,50 @@ app.post('/api/singin', jsonParser, function(req, res)
         .catch(err => {res.send("Wrong email or password.\n")});
     });
 
-app.post('/api/singup', jsonParser, function(req, res)
+app.post('/api/signup', jsonParser, function(req, res)
     {
-       Users.create({
+        let hash = jwt.sign({email: req.body.email}, key);
+
+        Users.create({
             email: req.body.email,
             password: hashing(req.body.password)
-            }
-        )        
-        .then(() => {res.send("User has been created successfully!\n");})
+            })        
+        .then(() => {
+            //sendEmail(req.body.email, hash);
+            res.send(hash);
+        })
         .catch(err => {res.status(500).json(err);
         });
     });
 
+app.post('/api/signup/:hash', jsonParser, function(req, res)
+    {
+        if(!verifyToken(req.params.hash))
+        {
+            res.send("Wrong token");
+            return;
+        }
+
+        Users.findOne({
+            where: {
+                email: jwt.decode(req.params.hash).email
+            }
+        })
+        .then(dbUser => {
+            dbUser.update({is_active: true});
+            res.send("User has been created successfully!\n");
+        }, () => {res.send("wrong token");})
+    })
 /////////////////ToDo list///////////////////////////////////////
 
 app.post('/api/todo/add', jsonParser, function(req, res)
     {
+        if(!verifyToken(req.body.token))
+        {
+            res.send("Wrong token");
+            return;
+        }
+
         let arr = [];
         
         req.body.todo.forEach(element =>
@@ -147,6 +190,12 @@ app.post('/api/todo/add', jsonParser, function(req, res)
 
 app.post('/api/todo/list', jsonParser, function(req, res)
     {
+        if(!verifyToken(req.body.token))
+        {
+            res.send("Wrong token");
+            return;
+        }
+
         ToDos.findAll({
             where: {user_id: jwt.decode(req.body.token).id, 
                     in_archive: false}
@@ -160,6 +209,12 @@ app.post('/api/todo/list', jsonParser, function(req, res)
 
 app.post('/api/todo/list/archive', jsonParser, function(req, res)
     {
+        if(!verifyToken(req.body.token))
+        {
+            res.send("Wrong token");
+            return;
+        }
+        
         ToDos.findAll({
             where: {user_id: jwt.decode(req.body.token).id, 
                     in_archive: true}
