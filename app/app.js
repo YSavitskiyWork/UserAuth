@@ -51,7 +51,11 @@ const ToDos = sequelize.define('todolists',
             type: Sequelize.INTEGER,
             validate: {
                 notEmpty: true
-            }
+            },
+            references: {
+                model: Users,
+                key: 'id'
+            }            
         },
         todo: {
             type: Sequelize.STRING(250),
@@ -59,17 +63,19 @@ const ToDos = sequelize.define('todolists',
                 notEmpty: true
             }
         },
-        isDone:{
+        is_done:{
             type: Sequelize.BOOLEAN,
-            defaultValue: 0
+            defaultValue: false
         },
-        inArchive:{
+        in_archive:{
             type: Sequelize.BOOLEAN,
-            defaultValue: 0
+            defaultValue: false
         }
 
+    },
+    {
+        timestamps: false
     });
-User.hasMany(ToDos, )
 
 Users.sync();
 ToDos.sync();
@@ -87,9 +93,12 @@ app.post('/api/singin', jsonParser, function(req, res)
             }
         })
         .then(dbUser => {
-                const token = jwt.sign({id: dbUser.id}, key);                
-                res.send(token);}
-            )
+                var token = jwt.sign({id: dbUser.id}, key);    
+                //console.log(jwt.decode(token).id);
+            
+                res.send(token);
+             
+            })
         .catch(err => {res.send("Wrong email or password.\n")});
     });
 
@@ -106,32 +115,64 @@ app.post('/api/singup', jsonParser, function(req, res)
         });
     });
 
+////////////////////////////////////////////////////////
+
 app.post('/api/todo/add', jsonParser, function(req, res)
     {
-        for(let i=0; i<req.body.todo.length(); i+=1)
-        {
-            ToDos.create({
-            user_id: jwt.decode(req.body.token).id,
-            todo: req.body.todo[i]
-            })
-            .then(() => {res.send("ToDo add successfully!\n")})
-            .catch(err => {res.send("Something goes wrong...\n")});
-        }
+        req.body.todo.forEach(element =>
+            {
+                ToDos.create({
+                user_id: jwt.decode(req.body.token).id,
+                todo: element
+                })
+                .then(() => {res.send("Success!");})
+                .catch(err => {res.send("Something goes wrong: \n" + err + "\n")});
+        })    
     });
 
-app.get('/api/todo/list', jsonParser, function(req, res)
+app.post('/api/todo/list', jsonParser, function(req, res)
     {
-        let user_id = jwt.decode(req.body.token).id;
-
-        res.send(()=>{return ToDos.findAll({
-            where: {user_id: user_id}
+        ToDos.findAll({
+            where: {user_id: jwt.decode(req.body.token).id, 
+                    in_archive: false}
         })
         .then(dbUsers => {
-
+            const todos = dbUsers.map(element => {return [element.id, element.todo]});
+            res.json(todos);
         })
+        .catch(err => {res.send(err);});
+    }); 
 
-        }); 
+app.post('/api/todo/list/archive', jsonParser, function(req, res)
+    {
+        ToDos.findAll({
+            where: {user_id: jwt.decode(req.body.token).id, 
+                    in_archive: true}
+        })
+        .then(dbUsers => {
+            const todos = dbUsers.map(element => { return [element.id, element.todo]});
+            res.json(todos);
+        })
+        .catch(err => {res.send(err);});
+    }); 
+
+app.post('/api/todo/done', jsonParser, function(req, res)
+    {
+        ToDos.sequelize.query("UPDATE todolists " +
+        "SET is_done = " + "'t'" +
+        " WHERE id = ANY ('{" + req.body.id + "}'::int[]);")
+        .spread(()=>{return 'success';});
     });
+
+app.post('/api/todo/archive', jsonParser, function(req, res)
+{
+    ToDos.sequelize.query("UPDATE todolists " +
+    "SET in_archive = " + "'t'" +
+    " WHERE id = ANY ('{" + req.body.id + "}'::int[]);")
+    .spread(() => {return 'success';});
+
+
+});
 
     
 app.listen(3000, function()
@@ -143,7 +184,7 @@ app.listen(3000, function()
 function hashing(data)
 {
     const hash = crypto.createHash('sha256');
-    hash.update(hashAddition);
+    hash.write(data + hashAddition);
     var hashStr = "";
 
     hash.on('readable', () => {
